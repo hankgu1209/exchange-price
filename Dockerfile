@@ -11,7 +11,7 @@ COPY . /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 使容器在 5000 端口上对外界开放
-EXPOSE 8000
+EXPOSE 5000
 
 # 定义环境变量
 ENV NAME World
