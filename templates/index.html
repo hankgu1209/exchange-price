@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Price Chart</title>
+    <script type="text/javascript" src="/static/echarts.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+        }
+        #form-container {
+            width: 30%;
+        }
+        #chart-container {
+            width: 70%;
+            height: 600px;
+        }
+        #table-container {
+            width: 100%;
+            margin-top: 20px;
+        }
+        #buttons-container {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="form-container">
+        <form id="data-form">
+            <label for="base_asset">Base Asset:</label>
+            <input type="text" id="base_asset" name="base_asset" required><br><br>
+            <label for="quote_asset">Quote Asset:</label>
+            <input type="text" id="quote_asset" name="quote_asset" required><br><br>
+            <label for="start_time">Start time:</label>
+            <input type="datetime-local" id="start_time" name="start_time" required><br><br>
+            <label for="end_time">End time:</label>
+            <input type="datetime-local" id="end_time" name="end_time" required><br><br>
+            <label for="interval">Interval:</label>
+            <select id="interval" name="interval">
+                <option value="1m">1 min</option>
+                <option value="5m">5 min</option>
+            </select><br><br>
+            <button type="button" onclick="submitForm()">Generate Charts</button>
+        </form>
+        <div id="buttons-container">
+            <button type="button" onclick="showHigh()">Show High</button>
+            <button type="button" onclick="showLow()">Show Low</button>
+            <button type="button" onclick="showClose()">Show Close</button>
+        </div>
+        <div id="table-container">
+            <table id="index-table" border="1" style="width:100%; margin-top: 20px; display: none;">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Exchange</th>
+                        <th>Exchange Symbol</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 动态生成内容 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div id="chart-container"></div>
+
+    <script>
+        let chartData = {};
+        let currentType = 'close'; // Default type
+        let myChart;
+
+        function submitForm() {
+            var form = document.getElementById('data-form');
+            var formData = new FormData(form);
+            var symbol = formData.get('base_asset') + formData.get('quote_asset');
+            
+            fetch('/chart_data', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                chartData = data;  // Save the fetched data
+                chartData.symbol = symbol; // Save the symbol
+                renderChart(symbol, data.times, data.closes_binanceSpot, data.closes_binanceIndex, data.closes_binanceFutures, data.closes_binanceMarkPrice, data.closes_bitget, data.closes_kucoin, data.closes_okx, data.closes_gateio, data.closes_bybit, data.closes_huobi, data.closes_mxc); // Render chart with close prices by default
+                fetchIndexConstituents(symbol); // Fetch and display index constituents
+            })
+            .catch(error => console.error('Error fetching the data:', error));
+        }
+
+        function renderChart(symbol, times, close_binance_spot, close_binance_index, close_binanceFutures, close_binanceMarkPrice, close_bitget, close_kucoin, close_okx, close_gateio, close_bybit, close_huobi, close_mxc) {
+            var formattedTimes = times.map(time => new Date(time));
+            if (!myChart) {
+                myChart = echarts.init(document.getElementById('chart-container'));
+            }
+            var option = {
+                title: {
+                    text: symbol + ' Price'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function (params) {
+                        const date = new Date(params[0].axisValue);
+                        const utcDate = date.toISOString().replace('T', ' ').replace(/\..+/, '');
+                        let tooltipText = `${utcDate}<br/>`;
+                        params.forEach(param => {
+                            tooltipText += `${param.marker} ${param.seriesName}: ${param.data[1]}<br/>`;
+                        });
+                        return tooltipText;
+                    }
+                },
+                legend: {
+                    data: ['Binance', 'BinanceIndex', 'BinanceFutures', 'BinanceMarkPrice', 'Bitget', 'Kucoin', 'Okx', 'Gate.io', 'Bybit', 'Huobi', 'Mxc'],  // Keep legend constant
+                    left: 'right'
+                },
+                xAxis: {
+                    type: 'time',
+                    data: formattedTimes,
+                    boundaryGap: false,
+                    axisLabel: {
+                        formatter: function (value) {
+                            const date = new Date(value);
+                            return date.toISOString().slice(0, 10) + ' ' + date.toISOString().slice(11, 16);
+                        }
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    scale: true
+                },
+                series: [
+                    { name: 'Binance', data: close_binance_spot.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'BinanceIndex', data: close_binance_index.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'BinanceFutures', data: close_binanceFutures.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'BinanceMarkPrice', data: close_binanceMarkPrice.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Bitget', data: close_bitget.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Kucoin', data: close_kucoin.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Okx', data: close_okx.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Gate.io', data: close_gateio.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Bybit', data: close_bybit.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Huobi', data: close_huobi.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false },
+                    { name: 'Mxc', data: close_mxc.map((value, index) => [formattedTimes[index], value]), type: 'line', smooth: false, showSymbol: false }
+                ],
+                dataZoom: [
+                    {
+                        type: 'slider',
+                        start: 0,
+                        end: 100
+                    },
+                    {
+                        type: 'inside',
+                        start: 0,
+                        end: 100
+                    }
+                ]
+            };
+
+            myChart.setOption(option);
+        }
+
+        function showHigh() {
+            currentType = 'highs';
+            renderChart(chartData.symbol, chartData.times, chartData.highs_binanceSpot, chartData.highs_binanceIndex, chartData.highs_binanceFutures, chartData.highs_binanceMarkPrice, chartData.highs_bitget, chartData.highs_kucoin, chartData.highs_okx, chartData.highs_gateio, chartData.highs_bybit, chartData.highs_huobi, chartData.highs_mxc);
+        }
+
+        function showLow() {
+            currentType = 'lows';
+            renderChart(chartData.symbol, chartData.times, chartData.lows_binanceSpot, chartData.lows_binanceIndex, chartData.lows_binanceFutures, chartData.lows_binanceMarkPrice, chartData.lows_bitget, chartData.lows_kucoin, chartData.lows_okx, chartData.lows_gateio, chartData.lows_bybit, chartData.lows_huobi, chartData.lows_mxc);
+        }
+
+        function showClose() {
+            currentType = 'close';
+            renderChart(chartData.symbol, chartData.times, chartData.closes_binanceSpot, chartData.closes_binanceIndex, chartData.closes_binanceFutures, chartData.closes_binanceMarkPrice, chartData.closes_bitget, chartData.closes_kucoin, chartData.closes_okx, chartData.closes_gateio, chartData.closes_bybit, chartData.closes_huobi, chartData.closes_mxc);
+        }
+
+        function fetchIndexConstituents(symbol) {
+            fetch(`https://fapi.binance.com/fapi/v1/constituents?symbol=${symbol}`)
+            .then(response => response.json())
+            .then(data => {
+                let table = document.getElementById('index-table');
+                let tbody = table.querySelector('tbody');
+                tbody.innerHTML = ''; // Clear existing data
+
+                data['constituents'].forEach(item => {
+                    let row = document.createElement('tr');
+                    let symbolCell = document.createElement('td');
+                    let exchangeCell = document.createElement('td');
+                    let exchangeSymbolCell = document.createElement('td');
+
+                    symbolCell.textContent = data.symbol;
+                    exchangeCell.textContent = item.exchange;
+                    exchangeSymbolCell.textContent = item.symbol;
+
+                    row.appendChild(symbolCell);
+                    row.appendChild(exchangeCell);
+                    row.appendChild(exchangeSymbolCell);
+                    tbody.appendChild(row);
+                });
+
+                table.style.display = 'table'; // Show the table
+            })
+            .catch(error => console.error('Error fetching index constituents:', error));
+        }
+    </script>
+</body>
+</html>
