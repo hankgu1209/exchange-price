@@ -17,4 +17,4 @@ EXPOSE 5000
 ENV NAME World
 
 # 在容器启动时运行 app.py
-CMD ["python", "app.py"]
+CMD ["gunicorn", "-c", "gunicorn_config.py", "demo:app"]
